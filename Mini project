@@ -1,0 +1,249 @@
+import cv2
+
+import time
+
+import numpy as np
+
+import math
+
+import mediapipe as mp
+
+import random
+
+import pygame
+
+
+class handDetector():
+
+   def __init__(self, mode=False, maxHands=2, detectionCon=0.5, trackCon=0.5):
+
+       self.mode = mode
+
+       self.maxHands = maxHands
+
+       self.detectionCon = detectionCon
+
+       self.trackCon = trackCon
+
+       self.mpHands = mp.solutions.hands
+
+       self.hands = self.mpHands.Hands(self.mode, self.maxHands,
+
+                                       min_detection_confidence=self.detectionCon,
+
+                                       min_tracking_confidence=self.trackCon)
+
+       self.mpDraw = mp.solutions.drawing_utils
+
+
+   def findHands(self, img, draw=True):
+
+       imgRGB = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+
+       self.results = self.hands.process(imgRGB)
+
+       if self.results.multi_hand_landmarks:
+
+           for handLms in self.results.multi_hand_landmarks:
+
+               if draw:
+
+                   self.mpDraw.draw_landmarks(img, handLms,
+
+                                              self.mpHands.HAND_CONNECTIONS)
+
+       return img
+
+
+   def findPosition(self, img, handNo=0, draw=True):
+
+       lmList = []
+
+       if self.results.multi_hand_landmarks:
+
+           myHand = self.results.multi_hand_landmarks[handNo]
+
+           for id, lm in enumerate(myHand.landmark):
+
+               h, w, c = img.shape
+
+               cx, cy = int(lm.x * w), int(lm.y * h)
+
+               lmList.append([id, cx, cy])
+
+               if draw:
+
+                   cv2.circle(img, (cx, cy), 15, (255, 0, 255), cv2.FILLED)
+
+       return lmList
+
+
+def main():
+
+   pygame.init()
+
+   startTime = time.time()
+
+   wCam, hCam = 1920, 1080
+
+   cap = cv2.VideoCapture(0)
+
+   cap.set(3, wCam)
+
+   cap.set(4, hCam)
+
+   detector = handDetector(detectionCon=0.7)
+
+   score = 0
+
+   game_over = False
+
+   circle_radius = 50
+
+   circles = []
+
+   refresh_time = 10
+
+   last_refresh = time.time()
+
+   final_score_display_time = 20 # 成績顯示時間
+
+   final_score_start_time = None # 成績開始顯示的時間
+
+
+   def generate_circles(num_circles):
+
+       return [(random.randint(circle_radius, wCam - circle_radius),
+
+                random.randint(circle_radius, hCam - circle_radius),
+
+                (random.randint(0, 255), random.randint(0, 255), random.randint(0, 255)))
+
+               for _ in range(num_circles)]
+
+
+   def reset_game():
+
+       nonlocal score, game_over, circles, startTime, last_refresh, final_score_start_time
+
+       score = 0
+
+       game_over = False
+
+       circles = generate_circles(20)
+
+       startTime = time.time()
+
+       last_refresh = time.time()
+
+       final_score_start_time = None
+
+
+   reset_game()
+
+
+   while True:
+
+       success, img = cap.read()
+
+       img = cv2.flip(img, 1)
+
+       img = detector.findHands(img)
+
+       lmList = detector.findPosition(img, draw=False)
+
+
+       # 檢查是否按下 'w' 鍵來重新開始遊戲
+
+       for event in pygame.event.get():
+
+           if event.type == pygame.KEYDOWN:
+
+               if event.key == pygame.K_w:
+
+                   reset_game()
+
+
+       # 遊戲邏輯
+
+       if not game_over:
+
+           current_time = time.time()
+
+           if current_time - last_refresh > refresh_time:
+
+               circles = generate_circles(20)
+
+               last_refresh = current_time
+
+
+           for circle in circles[:]:
+
+               cv2.circle(img, (circle[0], circle[1]), circle_radius, circle[2], -1)
+
+               if len(lmList) != 0:
+
+                   x, y = lmList[8][1], lmList[8][2]
+
+                   distance = math.sqrt((x - circle[0]) ** 2 + (y - circle[1]) ** 2)
+
+                   if distance < circle_radius:
+
+                       score += 1
+
+                       circles.remove(circle)
+
+
+           # 更新分數和時間
+
+           cv2.putText(img, f'Score: {score}', (wCam - 200, 50), cv2.FONT_HERSHEY_COMPLEX, 1, (255, 0, 0), 3)
+
+           elapsedTime = time.time() - startTime
+
+           remainingTime = 90 - int(elapsedTime)
+
+           cv2.putText(img, f'Time: {remainingTime}', (wCam - 200, 100), cv2.FONT_HERSHEY_COMPLEX, 1, (255, 0, 0), 3)
+
+
+           # 檢查遊戲是否結束
+
+           if elapsedTime >= 90:
+
+               game_over = True
+
+               final_score_start_time = time.time()
+
+
+       # 成績顯示在屏幕中央
+
+       if final_score_start_time:
+
+           final_elapsed = time.time() - final_score_start_time
+
+           if final_elapsed <= final_score_display_time:
+
+               final_text = 'failed' if score < 50 else 'pass' if score < 80 else 'Full marks'
+
+               cv2.putText(img, f'Final Score: {score} - {final_text}', (wCam // 2 - 200, hCam // 2), cv2.FONT_HERSHEY_COMPLEX, 1, (0, 0, 255), 3)
+
+           else:
+
+               reset_game()
+
+
+       cv2.imshow("HandDetector", img)
+
+
+       if cv2.waitKey(10) & 0xFF == ord('q'):
+
+           break
+
+
+   cap.release()
+
+   cv2.destroyAllWindows()
+
+
+if __name__ == '__main__':
+
+   main()
