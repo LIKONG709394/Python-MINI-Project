@@ -13,237 +13,146 @@ import random
 import pygame
 
 
+# Defining a class for hand detection
 class handDetector():
+    # Constructor with default parameters
+    def __init__(self, mode=False, maxHands=2, detectionCon=0.5, trackCon=0.5):
+        self.mode = mode
+        self.maxHands = maxHands
+        self.detectionCon = detectionCon
+        self.trackCon = trackCon
+        self.mpHands = mp.solutions.hands  # MediaPipe hands solution
+        # Initializing the MediaPipe Hands object
+        self.hands = self.mpHands.Hands(self.mode, self.maxHands,
+                                        min_detection_confidence=self.detectionCon,
+                                        min_tracking_confidence=self.trackCon)
+        self.mpDraw = mp.solutions.drawing_utils  # Drawing utilities
 
-   def __init__(self, mode=False, maxHands=2, detectionCon=0.5, trackCon=0.5):
+    # Method to find hands in an image
+    def findHands(self, img, draw=True):
+        imgRGB = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)  # Convert image to RGB
+        self.results = self.hands.process(imgRGB)  # Process the image for hand landmarks
+        # If hand landmarks are detected
+        if self.results.multi_hand_landmarks:
+            for handLms in self.results.multi_hand_landmarks:
+                if draw:
+                    # Draw the hand landmarks on the image
+                    self.mpDraw.draw_landmarks(img, handLms,
+                                               self.mpHands.HAND_CONNECTIONS)
+        return img  # Return the image with or without drawings
 
-       self.mode = mode
+    # Method to find the position of hand landmarks
+    def findPosition(self, img, handNo=0, draw=True):
+        lmList = []  # List to store landmark positions
+        # If hand landmarks are detected
+        if self.results.multi_hand_landmarks:
+            myHand = self.results.multi_hand_landmarks[handNo]  # Get the specified hand
+            for id, lm in enumerate(myHand.landmark):  # Iterate through landmarks
+                h, w, c = img.shape  # Get the width and height of the image
+                cx, cy = int(lm.x * w), int(lm.y * h)  # Calculate the position
+                lmList.append([id, cx, cy])  # Append to the list
+                if draw:
+                    # Draw a circle on the landmark position
+                    cv2.circle(img, (cx, cy), 15, (255, 0, 255), cv2.FILLED)
+        return lmList  # Return the list of positions
 
-       self.maxHands = maxHands
-
-       self.detectionCon = detectionCon
-
-       self.trackCon = trackCon
-
-       self.mpHands = mp.solutions.hands
-
-       self.hands = self.mpHands.Hands(self.mode, self.maxHands,
-
-                                       min_detection_confidence=self.detectionCon,
-
-                                       min_tracking_confidence=self.trackCon)
-
-       self.mpDraw = mp.solutions.drawing_utils
-
-
-   def findHands(self, img, draw=True):
-
-       imgRGB = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-
-       self.results = self.hands.process(imgRGB)
-
-       if self.results.multi_hand_landmarks:
-
-           for handLms in self.results.multi_hand_landmarks:
-
-               if draw:
-
-                   self.mpDraw.draw_landmarks(img, handLms,
-
-                                              self.mpHands.HAND_CONNECTIONS)
-
-       return img
-
-
-   def findPosition(self, img, handNo=0, draw=True):
-
-       lmList = []
-
-       if self.results.multi_hand_landmarks:
-
-           myHand = self.results.multi_hand_landmarks[handNo]
-
-           for id, lm in enumerate(myHand.landmark):
-
-               h, w, c = img.shape
-
-               cx, cy = int(lm.x * w), int(lm.y * h)
-
-               lmList.append([id, cx, cy])
-
-               if draw:
-
-                   cv2.circle(img, (cx, cy), 15, (255, 0, 255), cv2.FILLED)
-
-       return lmList
-
-
+# Main function to run the hand detector
 def main():
-
-   pygame.init()
-
-   startTime = time.time()
-
-   wCam, hCam = 1920, 1080
-
-   cap = cv2.VideoCapture(0)
-
-   cap.set(3, wCam)
-
-   cap.set(4, hCam)
-
-   detector = handDetector(detectionCon=0.7)
-
-   score = 0
-
-   game_over = False
-
-   circle_radius = 50
-
-   circles = []
-
-   refresh_time = 10
-
-   last_refresh = time.time()
-
-   final_score_display_time = 20 # 成績顯示時間
-
-   final_score_start_time = None # 成績開始顯示的時間
-
-
-   def generate_circles(num_circles):
-
-       return [(random.randint(circle_radius, wCam - circle_radius),
-
-                random.randint(circle_radius, hCam - circle_radius),
-
-                (random.randint(0, 255), random.randint(0, 255), random.randint(0, 255)))
-
-               for _ in range(num_circles)]
-
-
-   def reset_game():
-
-       nonlocal score, game_over, circles, startTime, last_refresh, final_score_start_time
-
-       score = 0
-
-       game_over = False
-
-       circles = generate_circles(20)
-
-       startTime = time.time()
-
-       last_refresh = time.time()
-
-       final_score_start_time = None
-
-
-   reset_game()
-
-
-   while True:
-
-       success, img = cap.read()
-
-       img = cv2.flip(img, 1)
-
-       img = detector.findHands(img)
-
-       lmList = detector.findPosition(img, draw=False)
-
-
-       # 檢查是否按下 'w' 鍵來重新開始遊戲
-
-       for event in pygame.event.get():
-
-           if event.type == pygame.KEYDOWN:
-
-               if event.key == pygame.K_w:
-
-                   reset_game()
-
-
-       # 遊戲邏輯
-
-       if not game_over:
-
-           current_time = time.time()
-
-           if current_time - last_refresh > refresh_time:
-
-               circles = generate_circles(20)
-
-               last_refresh = current_time
-
-
-           for circle in circles[:]:
-
-               cv2.circle(img, (circle[0], circle[1]), circle_radius, circle[2], -1)
-
-               if len(lmList) != 0:
-
-                   x, y = lmList[8][1], lmList[8][2]
-
-                   distance = math.sqrt((x - circle[0]) ** 2 + (y - circle[1]) ** 2)
-
-                   if distance < circle_radius:
-
-                       score += 1
-
-                       circles.remove(circle)
-
-
-           # 更新分數和時間
-
-           cv2.putText(img, f'Score: {score}', (wCam - 200, 50), cv2.FONT_HERSHEY_COMPLEX, 1, (255, 0, 0), 3)
-
-           elapsedTime = time.time() - startTime
-
-           remainingTime = 90 - int(elapsedTime)
-
-           cv2.putText(img, f'Time: {remainingTime}', (wCam - 200, 100), cv2.FONT_HERSHEY_COMPLEX, 1, (255, 0, 0), 3)
-
-
-           # 檢查遊戲是否結束
-
-           if elapsedTime >= 90:
-
-               game_over = True
-
-               final_score_start_time = time.time()
-
-
-       # 成績顯示在屏幕中央
-
-       if final_score_start_time:
-
-           final_elapsed = time.time() - final_score_start_time
-
-           if final_elapsed <= final_score_display_time:
-
-               final_text = 'failed' if score < 50 else 'pass' if score < 80 else 'Full marks'
-
-               cv2.putText(img, f'Final Score: {score} - {final_text}', (wCam // 2 - 200, hCam // 2), cv2.FONT_HERSHEY_COMPLEX, 1, (0, 0, 255), 3)
-
-           else:
-
-               reset_game()
-
-
-       cv2.imshow("HandDetector", img)
-
-
-       if cv2.waitKey(10) & 0xFF == ord('q'):
-
-           break
-
-
-   cap.release()
-
-   cv2.destroyAllWindows()
-
-
+    pygame.init()  # Initialize Pygame
+    startTime = time.time()  # Record the start time
+    wCam, hCam = 1920, 1080  # Set the width and height of the camera
+    cap = cv2.VideoCapture(0)  # Start video capture
+    cap.set(3, wCam)  # Set the width of the capture
+    cap.set(4, hCam)  # Set the height of the capture
+    detector = handDetector(detectionCon=0.7)  # Create a hand detector object
+    score = 0  # Initialize the score
+    game_over = False  # Flag to check if the game is over
+    circle_radius = 50  # Radius of the circles to be clicked
+    circles = []  # List to store circles
+    refresh_time = 10  # Time after which new circles are generated
+    last_refresh = time.time()  # Time of the last refresh
+    final_score_display_time = 20  # Time to display the final score
+    final_score_start_time = None  # Start time for displaying the final score
+
+    # Function to generate random circles
+    def generate_circles(num_circles):
+        return [(random.randint(circle_radius, wCam - circle_radius),
+                 random.randint(circle_radius, hCam - circle_radius),
+                 (random.randint(0, 255), random.randint(0, 255), random.randint(0, 255)))
+                for _ in range(num_circles)]
+
+    # Function to reset the game
+    def reset_game():
+        nonlocal score, game_over, circles, startTime, last_refresh, final_score_start_time
+        score = 0
+        game_over = False
+        circles = generate_circles(20)
+        startTime = time.time()
+        last_refresh = time.time()
+        final_score_start_time = None
+
+    reset_game()  # Reset the game at the start
+
+    # Game loop
+    while True:
+        success, img = cap.read()  # Read from the camera
+        img = cv2.flip(img, 1)  # Flip the image
+        img = detector.findHands(img)  # Find hands in the image
+        lmList = detector.findPosition(img, draw=False)  # Find landmark positions
+
+        # Check for 'w' key press to restart the game
+        for event in pygame.event.get():
+            if event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_w:
+                    reset_game()
+
+        # Game logic
+        if not game_over:
+            current_time = time.time()
+            # Refresh circles after a certain time
+            if current_time - last_refresh > refresh_time:
+                circles = generate_circles(20)
+                last_refresh = current_time
+
+            # Check if the hand is clicking on the circles
+            for circle in circles[:]:
+                cv2.circle(img, (circle[0], circle[1]), circle_radius, circle[2], -1)
+                if len(lmList) != 0:
+                    x, y = lmList[8][1], lmList[8][2]
+                    distance = math.sqrt((x - circle[0]) ** 2 + (y - circle[1]) ** 2)
+                    if distance < circle_radius:
+                        score += 1
+                        circles.remove(circle)
+
+            # Update the score and time
+            cv2.putText(img, f'Score: {score}', (wCam - 200, 50), cv2.FONT_HERSHEY_COMPLEX, 1, (255, 0, 0), 3)
+            elapsedTime = time.time() - startTime
+            remainingTime = 90 - int(elapsedTime)
+            cv2.putText(img, f'Time: {remainingTime}', (wCam - 200, 100), cv2.FONT_HERSHEY_COMPLEX, 1, (255, 0, 0), 3)
+
+            # Check if the game is over
+            if elapsedTime >= 90:
+                game_over = True
+                final_score_start_time = time.time()
+
+        # Display the final score on the screen
+        if final_score_start_time:
+            final_elapsed = time.time() - final_score_start_time
+            if final_elapsed <= final_score_display_time:
+                final_text = 'failed' if score < 50 else 'pass' if score < 80 else 'Full marks'
+                cv2.putText(img, f'Final Score: {score} - {final_text}', (wCam // 2 - 200, hCam // 2), cv2.FONT_HERSHEY_COMPLEX, 1, (0, 0, 255), 3)
+            else:
+                reset_game()
+
+        cv2.imshow("HandDetector", img)  # Show the image in a window
+
+        # Break the loop if 'q' is pressed
+        if cv2.waitKey(10) & 0xFF == ord('q'):
+            break
+
+    cap.release()  # Release the camera
+    cv2.destroyAllWindows()  # Close all OpenCV windows
+
+# Run the main function if this script is executed
 if __name__ == '__main__':
-
-   main()
+    main()
