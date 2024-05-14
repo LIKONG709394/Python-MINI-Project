@@ -139,7 +139,7 @@ def main():
         if final_score_start_time:
             final_elapsed = time.time() - final_score_start_time
             if final_elapsed <= final_score_display_time:
-                final_text = 'failed' if score < 50 else 'pass' if score < 80 else 'Full marks'
+                final_text = 'level1' if score < 50 else 'level2' if score < 80 else 'level3'
                 cv2.putText(img, f'Final Score: {score} - {final_text}', (wCam // 2 - 200, hCam // 2), cv2.FONT_HERSHEY_COMPLEX, 1, (0, 0, 255), 3)
             else:
                 reset_game()
